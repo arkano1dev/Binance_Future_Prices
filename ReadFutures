@@ -1,0 +1,109 @@
+import requests
+import pandas as pd
+import numpy as np
+import json
+import cvxpy as cvx
+import csv
+from datetime import datetime, timedelta
+import time
+import os 
+
+#create a directory to save all the historical prices
+
+directory = 'Data'
+if not os.path.exists(directory):
+    os.makedirs(directory)
+
+
+base_url = "https://api.binance.com/api/v3"
+
+# Start with past midnight today
+end_dt = datetime.today()
+end_dt = end_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+start_dt = end_dt - timedelta(hours=24) # Get past 24 hours
+
+df_columns = ['open_time', 'close_time', 'open', 'high', 'low', 'close', 
+              'volume', 'open_timestamp', 'close_timestamp']
+
+def get_historical_price(symbol: str, currency: str, start_dt: datetime, end_dt: datetime, interval: str):
+  start_timestamp = round(start_dt.timestamp())*1000
+  end_timestamp = round(end_dt.timestamp())*1000 - 1
+
+  r = requests.get(f'{base_url}/klines?symbol={symbol}{currency}&interval={interval}&startTime={start_timestamp}&endTime={end_timestamp}&limit=1000')
+  content = json.loads(r.content)
+  
+  if (len(content) > 0):
+    df = pd.DataFrame.from_records(content, columns=['open_timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_timestamp', 'quote_asset_volume', 'num_trades', 'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
+    df['open_time'] = df.open_timestamp.apply(lambda ts: datetime.fromtimestamp(ts/1000))
+    df['close_time'] = df.close_timestamp.apply(lambda ts: datetime.fromtimestamp(ts/1000))
+    return df[df_columns].sort_values('open_time', ascending=False)
+  else:
+    print('NO DATA RETRIEVED')
+    print(f'RESPONSE: {content}')
+    return None
+
+# Set a start date limit if you wish
+START_DATE_LIMIT = datetime(2023,1,1)
+
+# Put all the token you want to retrieve. In this project we fix the quote in USDT.
+#SYMBOL_USDT = ['BTC',"ETH"]
+
+
+#Read the .csv named symbols
+
+with open('symbols.csv') as csvfile:
+    
+    reader = csv.reader(csvfile)
+
+    SYMBOL_USDT_nested=[]
+
+    for row in reader:
+        SYMBOL_USDT_nested.append(row)
+
+#transform the nested list in a flat list
+
+SYMBOL_USDT=[]
+SYMBOL_USDT = [symbol[0] for symbol in SYMBOL_USDT_nested]
+
+#print(SYMBOL_USDT)
+
+for SYMBOL in SYMBOL_USDT:
+  CURRENCY = 'USDT' # Fix to USDT - can change as needed
+  print(f'[START] {SYMBOL}/{CURRENCY}')
+
+  # Start with past midnight today (1st Iteration)
+  end_dt = datetime.today()
+  end_dt_midnight = end_dt.replace(hour=0, minute=0, second=0, microsecond=0) # End: Midnight yesterday D-0 00:00
+  end_dt_checkpoint = end_dt_midnight
+  start_dt = end_dt_midnight - timedelta(hours=24) # Start: Get 24 hours ago yesterday from midnight D-1 08:00
+
+  print(f'{SYMBOL} 1ST ITERATION - Start Datetime: {start_dt} | End Datetime: {end_dt_midnight}')
+  df = get_historical_price(SYMBOL, CURRENCY, start_dt, end_dt_midnight, "1h")
+
+  # Keep going back the timestamp and repeat until we get no data from the API.
+  reached_first_trading_day = False
+  while (START_DATE_LIMIT < start_dt and not reached_first_trading_day):
+    end_dt = start_dt
+    start_dt = end_dt - timedelta(hours=24)
+
+    df_hp = get_historical_price(SYMBOL, CURRENCY, start_dt, end_dt, "1h")
+
+    if (df_hp is not None and len(df_hp.index) > 0):
+      # Data is retrieved: CONTINUE
+      print(f'{SYMBOL} - {start_dt} - {end_dt} - RETRIEVED {len(df_hp.index)} ROWS')
+      df = pd.concat([df, df_hp[df_columns]])
+    else:
+      # No Data retrieved: STOP
+      print(f'{SYMBOL} - {start_dt} - STOPPING LOOP - NO DATA RETRIEVED')
+      reached_first_trading_day = True
+    
+
+    if(START_DATE_LIMIT == start_dt):
+      print(f'[SAVE RESULT] {SYMBOL} - {start_dt} - {end_dt_checkpoint} - SAVING {len(df.index)} ROWS')
+      filename = f'{SYMBOL}_{CURRENCY}_{start_dt.year}{str(start_dt.month).zfill(2)}{str(start_dt.day).zfill(2)}_{end_dt_checkpoint.year}{str(end_dt_checkpoint.month).zfill(2)}{str(end_dt_checkpoint.day).zfill(2)}_{len(df.index)}.csv'
+      #df.to_csv("Users\Matia\Binance_future_prices\Data/" + filename, index=False)
+      df.to_csv(directory + '/' + filename, index=False)
+      #Flush all rows for year
+
+      df = pd.DataFrame(df_columns)
+      end_dt_checkpoint = start_dt

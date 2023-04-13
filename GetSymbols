@@ -1,0 +1,56 @@
+import requests
+import csv
+import json
+
+
+# Replace YOUR_Api_Key with your actual API key
+#API_KEY = 'a2fy0BbqZePFDoShqnU0PPEE4V38cB2oQJJTajptFTWb8WJILeRwWYJbXRMue8wW'
+
+SensitiveData="config.json"
+
+with open(SensitiveData) as user_file:
+  
+  APIs = json.load(user_file)
+
+  API_KEY= APIs["api_key"]
+
+
+#API_KEY = config[Api_Key]
+
+#print(API_KEY)
+
+# Define the API endpoint
+ENDPOINT = 'https://api.binance.com/api/v3/exchangeInfo'
+
+# Set up the API request headers
+headers = {
+    'Content-Type': 'application/json',
+    'X-MBX-APIKEY': API_KEY
+}
+
+# Make the API request
+response = requests.get(ENDPOINT, headers=headers)
+
+# Parse the response JSON
+symbols = []
+if response.status_code == 200:
+    data = response.json()
+    print(data)
+    for symbol in data['symbols']:
+        if symbol['status'] == 'TRADING' and symbol['quoteAsset'] == 'USDT': # Filter by trading status and quote asset
+            symbols.append(symbol['symbol'])
+else:
+    print('Failed to retrieve symbols:', response.status_code)
+
+
+symbols_without_suffix = [s[:-4] for s in symbols]
+print(symbols_without_suffix)
+
+# Print the list of symbols
+#print(symbols)
+
+# Write the symbols to a CSV file
+with open('symbols.csv', 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    for symbol in symbols_without_suffix:
+        writer.writerow([symbol])
