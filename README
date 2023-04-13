@@ -1,4 +1,4 @@
-Firstly, the code imports the necessary libraries, including Binance's API, pandas, and requests. It then creates an instance of the Binance API client using the API key and secret key provided by the user in a config.json doc for make it secrets and keep it private.
+Firstly, the code imports the necessary libraries, including Binance's API, pandas, and requests. It then creates an instance of the Binance API client using the API key and secret key provided by the user in a config.json doc for making it secrets and keep it private.
 
 Next, the code retrieves the symbols from Binance using the client's exchangeInfo method and filtering the pairs of coins in trading status and the USDT currencies, which returns a list of dictionaries containing information about each symbol. The code then extracts the symbol names from the dictionaries and saves them into a CSV file using pandas' to_csv() method.
 
